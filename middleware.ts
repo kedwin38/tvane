@@ -10,7 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/terminal")) {
+  if (pathname.startsWith("/terminal") || pathname.startsWith("/auto-trading")) {
     const hasSession = req.cookies.has("tv_session");
     if (!hasSession) {
       const loginUrl = new URL("/login", req.url);
@@ -30,5 +30,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/terminal/:path*", "/admin/:path*"],
+  matcher: ["/terminal/:path*", "/auto-trading/:path*", "/admin/:path*"],
 };

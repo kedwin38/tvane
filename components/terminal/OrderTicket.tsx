@@ -19,12 +19,33 @@ type Quote = {
   fairValue: FairValue | null;
 };
 
-const CONTRACT_TYPES = [
+type Family = "updown" | "digits" | "accumulator";
+
+const FAMILIES: { value: Family; label: string }[] = [
+  { value: "updown", label: "Rise/Fall" },
+  { value: "digits", label: "Digits" },
+  { value: "accumulator", label: "Accumulators" },
+];
+
+const UPDOWN_TYPES = [
   { value: "CALL", label: "Rise" },
   { value: "PUT", label: "Fall" },
-  { value: "DIGITDIFF", label: "Digit Differs" },
-  { value: "DIGITOVER", label: "Digit Over" },
 ];
+
+// Full Digits family per developers.deriv.com's contract catalogue —
+// last-tick-digit contracts. EVEN/ODD take no digit parameter; the rest
+// need one (0-9, with OVER/UNDER excluding the degenerate 0/9 case at
+// the API level, which Deriv itself validates).
+const DIGIT_TYPES = [
+  { value: "DIGITMATCH", label: "Matches" },
+  { value: "DIGITDIFF", label: "Differs" },
+  { value: "DIGITEVEN", label: "Even" },
+  { value: "DIGITODD", label: "Odd" },
+  { value: "DIGITOVER", label: "Over" },
+  { value: "DIGITUNDER", label: "Under" },
+];
+
+const GROWTH_RATES = [0.01, 0.02, 0.03, 0.04, 0.05];
 
 export function OrderTicket({
   symbol,
@@ -33,17 +54,22 @@ export function OrderTicket({
   symbol: string;
   isVirtual: boolean | null;
 }) {
-  const [contractType, setContractType] = useState("CALL");
+  const [family, setFamily] = useState<Family>("updown");
+  const [updownType, setUpdownType] = useState("CALL");
+  const [digitType, setDigitType] = useState("DIGITDIFF");
   const [amount, setAmount] = useState(10);
   const [duration, setDuration] = useState(5);
   const [durationUnit, setDurationUnit] = useState<"t" | "m">("t");
   const [digitBarrier, setDigitBarrier] = useState(0);
+  const [growthRate, setGrowthRate] = useState(0.02);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [orderResult, setOrderResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const isDigit = contractType.startsWith("DIGIT");
+
+  const contractType = family === "updown" ? updownType : family === "digits" ? digitType : "ACCU";
+  const digitNeedsBarrier = family === "digits" && digitType !== "DIGITEVEN" && digitType !== "DIGITODD";
 
   useEffect(() => {
     const params: Record<string, any> = {
@@ -52,10 +78,14 @@ export function OrderTicket({
       amount,
       basis: "stake",
       currency: "USD",
-      duration,
-      duration_unit: durationUnit,
     };
-    if (isDigit) params.barrier = String(digitBarrier);
+    if (family === "accumulator") {
+      params.growth_rate = growthRate;
+    } else {
+      params.duration = duration;
+      params.duration_unit = durationUnit;
+      if (digitNeedsBarrier) params.barrier = String(digitBarrier);
+    }
 
     setQuote(null);
     setQuoteError(null);
@@ -70,7 +100,7 @@ export function OrderTicket({
       }
     });
     return () => es.close();
-  }, [symbol, contractType, amount, duration, durationUnit, digitBarrier, isDigit]);
+  }, [symbol, contractType, family, amount, duration, durationUnit, digitBarrier, digitNeedsBarrier, growthRate]);
 
   async function placeTrade() {
     if (!quote) return;
@@ -112,33 +142,87 @@ export function OrderTicket({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        {CONTRACT_TYPES.map((c) => (
+      <div className="grid grid-cols-3 gap-2">
+        {FAMILIES.map((f) => (
           <button
-            key={c.value}
-            onClick={() => setContractType(c.value)}
-            className={`rounded-md border px-3 py-2 text-sm transition-colors ${
-              contractType === c.value
+            key={f.value}
+            onClick={() => setFamily(f.value)}
+            className={`rounded-md border px-2 py-1.5 text-xs transition-colors ${
+              family === f.value
                 ? "border-teal/40 bg-teal/10 text-teal"
                 : "border-hairline bg-panel-raised text-text-2 hover:text-text-1"
             }`}
           >
-            {c.label}
+            {f.label}
           </button>
         ))}
       </div>
 
-      {isDigit && (
+      {family === "updown" && (
+        <div className="grid grid-cols-2 gap-2">
+          {UPDOWN_TYPES.map((c) => (
+            <button
+              key={c.value}
+              onClick={() => setUpdownType(c.value)}
+              className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                updownType === c.value
+                  ? "border-teal/40 bg-teal/10 text-teal"
+                  : "border-hairline bg-panel-raised text-text-2 hover:text-text-1"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {family === "digits" && (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {DIGIT_TYPES.map((c) => (
+              <button
+                key={c.value}
+                onClick={() => setDigitType(c.value)}
+                className={`rounded-md border px-2 py-1.5 text-xs transition-colors ${
+                  digitType === c.value
+                    ? "border-teal/40 bg-teal/10 text-teal"
+                    : "border-hairline bg-panel-raised text-text-2 hover:text-text-1"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          {digitNeedsBarrier && (
+            <label className="flex flex-col gap-1">
+              <span className="label-caps text-text-3">Digit</span>
+              <input
+                type="number"
+                min={0}
+                max={9}
+                value={digitBarrier}
+                onChange={(e) => setDigitBarrier(Number(e.target.value))}
+                className="rounded-md border border-hairline bg-panel-raised px-3 py-2 font-mono text-text-1 outline-none focus:border-teal/50"
+              />
+            </label>
+          )}
+        </>
+      )}
+
+      {family === "accumulator" && (
         <label className="flex flex-col gap-1">
-          <span className="label-caps text-text-3">Digit</span>
-          <input
-            type="number"
-            min={0}
-            max={9}
-            value={digitBarrier}
-            onChange={(e) => setDigitBarrier(Number(e.target.value))}
+          <span className="label-caps text-text-3">Growth rate</span>
+          <select
+            value={growthRate}
+            onChange={(e) => setGrowthRate(Number(e.target.value))}
             className="rounded-md border border-hairline bg-panel-raised px-3 py-2 font-mono text-text-1 outline-none focus:border-teal/50"
-          />
+          >
+            {GROWTH_RATES.map((r) => (
+              <option key={r} value={r}>
+                {(r * 100).toFixed(0)}%
+              </option>
+            ))}
+          </select>
         </label>
       )}
 
@@ -153,26 +237,28 @@ export function OrderTicket({
             className="rounded-md border border-hairline bg-panel-raised px-3 py-2 font-mono text-text-1 outline-none focus:border-teal/50"
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="label-caps text-text-3">Duration</span>
-          <div className="flex gap-1">
-            <input
-              type="number"
-              min={1}
-              value={duration}
-              onChange={(e) => setDuration(Number(e.target.value))}
-              className="w-full rounded-md border border-hairline bg-panel-raised px-3 py-2 font-mono text-text-1 outline-none focus:border-teal/50"
-            />
-            <select
-              value={durationUnit}
-              onChange={(e) => setDurationUnit(e.target.value as "t" | "m")}
-              className="rounded-md border border-hairline bg-panel-raised px-2 font-mono text-text-1 outline-none focus:border-teal/50"
-            >
-              <option value="t">ticks</option>
-              <option value="m">min</option>
-            </select>
-          </div>
-        </label>
+        {family !== "accumulator" && (
+          <label className="flex flex-col gap-1">
+            <span className="label-caps text-text-3">Duration</span>
+            <div className="flex gap-1">
+              <input
+                type="number"
+                min={1}
+                value={duration}
+                onChange={(e) => setDuration(Number(e.target.value))}
+                className="w-full rounded-md border border-hairline bg-panel-raised px-3 py-2 font-mono text-text-1 outline-none focus:border-teal/50"
+              />
+              <select
+                value={durationUnit}
+                onChange={(e) => setDurationUnit(e.target.value as "t" | "m")}
+                className="rounded-md border border-hairline bg-panel-raised px-2 font-mono text-text-1 outline-none focus:border-teal/50"
+              >
+                <option value="t">ticks</option>
+                <option value="m">min</option>
+              </select>
+            </div>
+          </label>
+        )}
       </div>
 
       <div className="rounded-md border border-hairline bg-panel-raised p-3">

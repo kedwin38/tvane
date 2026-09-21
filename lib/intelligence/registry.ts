@@ -30,6 +30,7 @@ type TickEntry = {
   tracker: DigitTracker;
   latest: { states: DigitState[]; sampleCount: number } | null;
   listeners: Set<(states: DigitState[], sampleCount: number, epoch: number) => void>;
+  changeListeners: Set<(changes: import("./layer2-digits").DigitStatusChange[]) => void>;
 };
 
 const globalForRegistry = globalThis as unknown as {
@@ -120,7 +121,12 @@ async function ensureTickStream(symbol: string): Promise<TickEntry> {
   const existing = tickRegistry.get(symbol);
   if (existing) return existing;
 
-  const entry: TickEntry = { tracker: new DigitTracker(symbol), latest: null, listeners: new Set() };
+  const entry: TickEntry = {
+    tracker: new DigitTracker(symbol),
+    latest: null,
+    listeners: new Set(),
+    changeListeners: new Set(),
+  };
   tickRegistry.set(symbol, entry);
 
   const socket = await getMarketSocket();
@@ -145,6 +151,7 @@ async function ensureTickStream(symbol: string): Promise<TickEntry> {
             })),
           })
           .catch(() => {});
+        for (const l of entry.changeListeners) l(changes);
       }
     },
     { streamType: "tick", discriminator: symbol }
@@ -172,6 +179,17 @@ export async function subscribeTicks(
   entry.listeners.add(onUpdate);
   if (entry.latest) onUpdate(entry.latest.states, entry.latest.sampleCount, Date.now() / 1000);
   return () => entry.listeners.delete(onUpdate);
+}
+
+/** Fires only when a digit's SPRT status actually transitions (not on
+ * every tick) — this is what lib/autotrading/engine.ts reacts to. */
+export async function subscribeDigitChanges(
+  symbol: string,
+  onChange: (changes: import("./layer2-digits").DigitStatusChange[]) => void
+): Promise<() => void> {
+  const entry = await ensureTickStream(symbol);
+  entry.changeListeners.add(onChange);
+  return () => entry.changeListeners.delete(onChange);
 }
 
 /** Current live Layer 1 state + spot price for a symbol, starting the

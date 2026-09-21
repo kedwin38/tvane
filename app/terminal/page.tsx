@@ -24,6 +24,9 @@ export default function TerminalPage() {
         </Link>
         <div className="flex items-center gap-6">
           <SymbolPicker value={symbol} onChange={setSymbol} />
+          <Link href="/auto-trading" className="label-caps text-text-3 hover:text-text-1">
+            Auto Trading
+          </Link>
           <AccountBadge onLoaded={(acc) => setIsVirtual(acc ? acc.is_virtual : null)} />
           <form action="/api/auth/logout" method="POST">
             <button className="label-caps text-text-3 hover:text-text-1">Sign out</button>

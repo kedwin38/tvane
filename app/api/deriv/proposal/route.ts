@@ -73,9 +73,15 @@ export async function GET(req: Request) {
             amount: contractParams.amount,
             basis: contractParams.basis ?? "stake",
             currency: contractParams.currency ?? "USD",
-            duration: contractParams.duration,
-            duration_unit: contractParams.duration_unit,
-            ...(contractParams.barrier ? { barrier: contractParams.barrier } : {}),
+            // Accumulators have no fixed duration — they run until sold
+            // or the range is breached — and take growth_rate instead.
+            ...(contractParams.contract_type === "ACCU"
+              ? { growth_rate: contractParams.growth_rate }
+              : {
+                  duration: contractParams.duration,
+                  duration_unit: contractParams.duration_unit,
+                  ...(contractParams.barrier ? { barrier: contractParams.barrier } : {}),
+                }),
           },
           (msg) => {
             if (msg.error) {

@@ -26,6 +26,7 @@ model User {
   updatedAt         DateTime  @updatedAt
   lastLoginAt       DateTime?
   sessions          UserSession[]
+  autoStrategies    AutoStrategy[]
 
   @@index([derivLoginId])
 }
@@ -128,4 +129,47 @@ model DigitSignal {
   createdAt   DateTime @default(now())
 
   @@index([symbol, createdAt])
+}
+
+// A user-enabled automated strategy: watches Layer 2's digit-status
+// signals for one symbol and trades DIGITDIFF against a digit while it
+// is flagged "depressed" (SPRT-confirmed below-uniform frequency, which
+// is exactly the condition that makes "differs" win more often than
+// the naive 90% assumption a payout is priced against). Risk controls
+// are deliberately named for what they actually track — capital
+// committed and trade count — not "loss", since realized P/L requires
+// contract-settlement tracking this build does not yet do (see
+// lib/autotrading/engine.ts).
+model AutoStrategy {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbol            String
+  stakeAmount       Float
+  maxDailyStakeUsd  Float
+  maxTradesPerDay   Int
+  enabled           Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// One automated fire, successful or not — the execution record and the
+// risk-limit accounting ledger for AutoStrategy at once.
+model AutoTradeLog {
+  id            String   @id @default(cuid())
+  strategyId    String
+  userId        String
+  symbol        String
+  digit         Int
+  contractType  String
+  stakeAmount   Float
+  outcome       String // "executed" | "rejected" | "error"
+  reason        String?
+  contractId    String?
+  createdAt     DateTime @default(now())
+
+  @@index([strategyId, createdAt])
+  @@index([userId, createdAt])
 }
