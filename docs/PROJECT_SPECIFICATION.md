@@ -179,11 +179,43 @@ Per the Deriv platform research already completed for this project:
 
 ## 8. Build Phases
 
-1. **Foundation**: connection manager, OAuth flow, manual trading (read-only + basic order ticket), `contracts_for`-driven UI — no intelligence layer yet, prove the plumbing.
-2. **Synthetic Intelligence Engine v1**: Layer 1 estimator + self-falsification, Layer 2 digit-edge detector (SPRT), live-validated against real Deriv feeds before any capital allocation.
-3. **Fair-value pricing (Layer 3)** for the highest-confidence contract families first (Digits, then Touch/No-Touch and Vanillas), each gated behind Layer 6 kill-switches from day one.
-4. **Execution & risk core (Layer 4)**, wired to both manual and auto flows.
-5. **Backtest harness with injected costs (Layer 5)** — required before any strategy is allowed to run live, not an afterthought.
-6. **Auto Trading UI** exposing the STATE/SHIFT/EVIDENCE/CONFIDENCE/RISK/TRACE panel per strategy.
-7. **Strategy Studio**: DBot XML import first (fastest path to user value, reuses existing execution core), then visual builder, then sandboxed code environment last (highest security surface).
+Status as of the current build — kept honest here rather than left as a
+stale plan; "done" means live on Railway and confirmed via deploy logs
+or a build pass, not just written.
+
+1. **Foundation** — ✅ done. Per-user Deriv connection manager
+   (`lib/deriv/socket.ts`, `market.ts`, `user-connections.ts`), "Login
+   with Deriv" OAuth (classic multi-token redirect flow, verified
+   against Deriv's own source), Postgres via Prisma (users, sessions,
+   encrypted credential vault, audit log), a secured `/admin` with
+   separate auth, forced password rotation, live health checks, and a
+   runtime-editable credential store. Manual trading order ticket live
+   for Rise/Fall and the Digits family; broader `contracts_for`-driven
+   coverage is still ahead (see §9 below).
+2. **Synthetic Intelligence Engine v1** — 🔶 in progress. Layer 1 (live
+   GBM parameter estimator + self-falsification battery) and Layer 2
+   (SPRT-based digit-distribution monitor) are both live, running
+   against real Deriv market data, and persisted to Postgres. Neither
+   has been live-validated over any meaningful duration yet — "live" so
+   far means "deployed and streaming," not "track-recorded."
+3. **Fair-value pricing (Layer 3)** — not started.
+4. **Execution & risk core (Layer 4)** — not started. The current order
+   ticket executes real trades directly against Deriv with a
+   type-to-confirm gate; there is no stake-sizing, exposure-cap, or
+   kill-switch logic yet beyond that manual confirmation.
+5. **Backtest harness with injected costs (Layer 5)** — not started.
+6. **Auto Trading UI** — not started (the terminal's Tidevane
+   Intelligence panel currently displays Layer 1/2 output as read-only
+   STATE/SHIFT information, not an enable/disable strategy control).
+7. **Strategy Studio** (DBot import, visual builder, sandboxed code) —
+   not started.
+8. **Real-Market Intelligence Engine** — not started, as planned, until
+   the synthetic engine has an actual track record.
+
+Known open items outside this list: the registered Deriv OAuth app_id's
+format doesn't match any previously-confirmed pattern and needs a
+one-time sanity check against the Deriv dashboard; the app currently
+runs as a single Railway instance (the in-memory connection pool and
+rate limiter in `lib/deriv/user-connections.ts` / `lib/security/rate-
+limit.ts` would need a shared backing store before horizontal scaling).
 8. **Real-Market Intelligence Engine**: only after the synthetic engine has live-validated track record, since the modeling approach is genuinely different and shouldn't be built speculatively ahead of the first engine proving itself.
