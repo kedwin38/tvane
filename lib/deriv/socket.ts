@@ -1,55 +1,63 @@
 import WebSocket from "ws";
 
-// Server-side-only singleton connection to the Deriv WebSocket API.
-// The API token lives here and only here — it is never sent to the
-// browser. The frontend talks to our own Next.js route handlers, which
-// relay data derived from this connection.
-//
-// Per the platform architecture (docs/PROJECT_SPECIFICATION.md, section
-// 5): a production multi-tenant build needs one connection per end user,
-// each authorized with that user's own token. This single-connection
-// client is the testing/demo shape for one account (the token supplied
-// for development) — the per-user connection manager is a build-phase
-// item, not implemented here.
+// One Deriv WebSocket connection, request/response + subscription
+// multiplexing. This is the reusable core behind both the unauthenticated
+// market-data connection (lib/deriv/market.ts) and each logged-in user's
+// own authorized connection (lib/deriv/user-connections.ts) — per
+// docs/PROJECT_SPECIFICATION.md section 5, a multi-tenant build needs one
+// connection per end user, each authorized with that user's own token,
+// never a single connection multiplexing every user's trades.
 
-type PendingRequest = {
-  resolve: (value: any) => void;
-  reject: (reason: any) => void;
-};
-
+type PendingRequest = { resolve: (value: any) => void; reject: (reason: any) => void };
 type SubscriptionHandler = (data: any) => void;
 
-const DERIV_WS_URL = process.env.DERIV_WS_URL ?? "wss://ws.derivws.com/websockets/v3";
-const DERIV_APP_ID = process.env.DERIV_APP_ID ?? "1089";
-const DERIV_API_TOKEN = process.env.DERIV_API_TOKEN;
+const DEFAULT_WS_URL = "wss://ws.derivws.com/websockets/v3";
 
-class DerivClient {
+export class DerivSocket {
   private ws: WebSocket | null = null;
   private connecting: Promise<void> | null = null;
   private reqId = 1;
   private pending = new Map<number, PendingRequest>();
   private subscriptions = new Map<string, Set<SubscriptionHandler>>();
-  private subscriptionIds = new Map<string, string>(); // key -> deriv subscription id
+  private subscriptionIds = new Map<string, string>();
   private accountInfo: any = null;
+  private closed = false;
+  private lastActivity = Date.now();
+  private wsUrl: string;
+
+  constructor(
+    private appId: string,
+    private token?: string,
+    private onAuthorized?: (info: any) => void,
+    wsUrl?: string
+  ) {
+    this.wsUrl = wsUrl ?? process.env.DERIV_WS_URL ?? DEFAULT_WS_URL;
+  }
+
+  get idleMs() {
+    return Date.now() - this.lastActivity;
+  }
 
   private key(msgType: string, discriminator?: string) {
     return discriminator ? `${msgType}:${discriminator}` : msgType;
   }
 
   async connect(): Promise<void> {
+    if (this.closed) throw new Error("DerivSocket has been closed.");
     if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
     if (this.connecting) return this.connecting;
 
     this.connecting = new Promise((resolve, reject) => {
-      const url = `${DERIV_WS_URL}?app_id=${DERIV_APP_ID}`;
+      const url = `${this.wsUrl}?app_id=${this.appId}`;
       const ws = new WebSocket(url);
       this.ws = ws;
 
       ws.on("open", async () => {
         try {
-          if (DERIV_API_TOKEN) {
-            const authRes = await this.request("authorize", { authorize: DERIV_API_TOKEN });
+          if (this.token) {
+            const authRes = await this.request("authorize", { authorize: this.token });
             this.accountInfo = authRes.authorize;
+            this.onAuthorized?.(this.accountInfo);
           }
           this.connecting = null;
           resolve();
@@ -60,6 +68,7 @@ class DerivClient {
       });
 
       ws.on("message", (raw) => {
+        this.lastActivity = Date.now();
         let msg: any;
         try {
           msg = JSON.parse(raw.toString());
@@ -74,20 +83,18 @@ class DerivClient {
           else p.resolve(msg);
         }
 
-        // route streaming updates (ticks, ohlc, proposal, balance...) to subscribers
         const streamKey = this.streamKeyFromMessage(msg);
         if (streamKey && this.subscriptions.has(streamKey)) {
-          for (const handler of this.subscriptions.get(streamKey)!) {
-            handler(msg);
-          }
+          for (const handler of this.subscriptions.get(streamKey)!) handler(msg);
         }
       });
 
       ws.on("close", () => {
         this.ws = null;
         this.connecting = null;
-        // simple auto-reconnect for the dev/testing setup
-        setTimeout(() => this.connect().catch(() => {}), 1500);
+        if (!this.closed) {
+          setTimeout(() => this.connect().catch(() => {}), 1500);
+        }
       });
 
       ws.on("error", (err) => {
@@ -111,6 +118,7 @@ class DerivClient {
 
   async request(msgType: string, payload: Record<string, any>): Promise<any> {
     await this.connect();
+    this.lastActivity = Date.now();
     const req_id = this.reqId++;
     const body = JSON.stringify({ ...payload, req_id });
 
@@ -122,7 +130,6 @@ class DerivClient {
           reject(err);
         }
       });
-      // safety timeout so a dropped response can't hang a caller forever
       setTimeout(() => {
         if (this.pending.has(req_id)) {
           this.pending.delete(req_id);
@@ -132,7 +139,6 @@ class DerivClient {
     });
   }
 
-  /** Subscribe to a streaming message type; returns an unsubscribe function. */
   async subscribe(
     msgType: string,
     payload: Record<string, any>,
@@ -152,7 +158,6 @@ class DerivClient {
     const first = await this.request(msgType, { ...requestBody, subscribe: 1 });
     const subId = first.subscription?.id;
     if (subId) this.subscriptionIds.set(streamKey, subId);
-    // deliver the first payload immediately too
     onUpdate(first);
 
     return async () => {
@@ -163,7 +168,7 @@ class DerivClient {
           try {
             await this.request("forget", { forget: subId });
           } catch {
-            /* connection may already be gone; nothing to clean up */
+            /* connection may already be gone */
           }
         }
         this.subscriptionIds.delete(streamKey);
@@ -175,10 +180,10 @@ class DerivClient {
   getAccountInfo() {
     return this.accountInfo;
   }
-}
 
-// Node module caching gives us a true singleton across route handlers
-// within the same server process.
-const globalForDeriv = globalThis as unknown as { __derivClient?: DerivClient };
-export const derivClient = globalForDeriv.__derivClient ?? new DerivClient();
-globalForDeriv.__derivClient = derivClient;
+  close() {
+    this.closed = true;
+    this.ws?.close();
+    this.ws = null;
+  }
+}

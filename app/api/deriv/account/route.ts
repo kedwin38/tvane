@@ -1,21 +1,20 @@
 import { NextResponse } from "next/server";
-import { derivClient } from "@/lib/deriv/client";
+import { getCurrentUser } from "@/lib/auth/user-session";
+import { getUserSocket } from "@/lib/deriv/user-connections";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  try {
-    await derivClient.connect();
-    const info = derivClient.getAccountInfo();
-    if (!info) {
-      return NextResponse.json(
-        { error: "Not authorized. Check DERIV_API_TOKEN in .env.local." },
-        { status: 401 }
-      );
-    }
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
 
-    const balanceRes = await derivClient.request("balance", { balance: 1 });
+  try {
+    const socket = await getUserSocket(user.id);
+    const info = socket.getAccountInfo();
+    const balanceRes = await socket.request("balance", { balance: 1 });
 
     return NextResponse.json({
       loginid: info.loginid,
@@ -28,9 +27,6 @@ export async function GET() {
       balance: balanceRes.balance,
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? "Failed to reach Deriv." },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: err?.message ?? "Failed to reach Deriv." }, { status: 502 });
   }
 }

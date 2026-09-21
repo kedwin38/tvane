@@ -9,13 +9,36 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts";
 
-type VolState = { sigmaPerBar: number; annualizedSigmaPct: number; samples: number };
+export type Layer1State = {
+  symbol: string;
+  granularity: number;
+  muPerBar: number;
+  sigmaPerBar: number;
+  annualizedSigmaPct: number;
+  annualizedMuPct: number;
+  samples: number;
+  falsification: {
+    modelValid: boolean;
+    invalidReason: string | null;
+    acf1: number | null;
+    ljungBoxP: number | null;
+    excessKurtosis: number | null;
+  };
+};
 
-export function Chart({ symbol, granularity = 60 }: { symbol: string; granularity?: number }) {
+export function Chart({
+  symbol,
+  granularity = 60,
+  onState,
+}: {
+  symbol: string;
+  granularity?: number;
+  onState?: (state: Layer1State) => void;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const [volState, setVolState] = useState<VolState | null>(null);
+  const [volState, setVolState] = useState<Layer1State | null>(null);
   const [connected, setConnected] = useState(false);
   const [lastPrice, setLastPrice] = useState<number | null>(null);
   const [priceDelta, setPriceDelta] = useState<number>(0);
@@ -69,6 +92,11 @@ export function Chart({ symbol, granularity = 60 }: { symbol: string; granularit
     };
   }, []);
 
+  const onStateRef = useRef(onState);
+  useEffect(() => {
+    onStateRef.current = onState;
+  }, [onState]);
+
   useEffect(() => {
     const es = new EventSource(`/api/deriv/stream?symbol=${symbol}&granularity=${granularity}`);
     let firstClose: number | null = null;
@@ -92,6 +120,7 @@ export function Chart({ symbol, granularity = 60 }: { symbol: string; granularit
         setLastPrice(bars[bars.length - 1].close);
       }
       setVolState(state);
+      onStateRef.current?.(state);
     });
 
     es.addEventListener("candle", (evt) => {
@@ -107,6 +136,7 @@ export function Chart({ symbol, granularity = 60 }: { symbol: string; granularit
       setLastPrice(bar.close);
       if (firstClose) setPriceDelta(((bar.close - firstClose) / firstClose) * 100);
       setVolState(state);
+      onStateRef.current?.(state);
     });
 
     return () => es.close();
@@ -138,6 +168,11 @@ export function Chart({ symbol, granularity = 60 }: { symbol: string; granularit
             <div className="flex items-center gap-1.5 font-mono text-xs text-text-2">
               <span className="label-caps text-text-3">σ live</span>
               <span className="tabular text-teal">{volState.annualizedSigmaPct.toFixed(1)}%</span>
+              {volState.falsification.modelValid === false && (
+                <span className="label-caps rounded bg-warning/10 px-1.5 py-0.5 text-warning">
+                  Model flagged
+                </span>
+              )}
             </div>
           )}
           <div className="flex items-center gap-1.5">

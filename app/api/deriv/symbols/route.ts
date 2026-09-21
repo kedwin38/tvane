@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { derivClient } from "@/lib/deriv/client";
+import { getMarketSocket } from "@/lib/deriv/market";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const res = await derivClient.request("active_symbols", {
+    const socket = await getMarketSocket();
+    const res = await socket.request("active_symbols", {
       active_symbols: "brief",
       product_type: "basic",
     });
@@ -24,9 +25,6 @@ export async function GET() {
 
     return NextResponse.json({ symbols });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? "Failed to fetch symbols." },
-      { status: 502 }
-    );
+    return NextResponse.json({ error: err?.message ?? "Failed to fetch symbols." }, { status: 502 });
   }
 }

@@ -1,16 +1,15 @@
-import { derivClient } from "@/lib/deriv/client";
+import { getCurrentUser } from "@/lib/auth/user-session";
+import { getUserSocket } from "@/lib/deriv/user-connections";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Live quote stream for the order ticket. Wraps Deriv's `proposal` call
-// with subscribe:1 so the ticket's price updates in real time as the
-// market moves — mirrors the EVIDENCE/CONFIDENCE fields described in
-// docs/PROJECT_SPECIFICATION.md even though the fair-value pricing engine
-// (Layer 3) itself is a later build phase; today this streams Deriv's own
-// quoted price only.
-
 export async function GET(req: Request) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return new Response(JSON.stringify({ error: "Not signed in." }), { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const raw = searchParams.get("params");
   if (!raw) {
@@ -24,7 +23,7 @@ export async function GET(req: Request) {
     return new Response(JSON.stringify({ error: "invalid params" }), { status: 400 });
   }
 
-  const subKey = `${contractParams.symbol}:${contractParams.contract_type}:${Date.now()}:${Math.random()}`;
+  const subKey = `${user.id}:${contractParams.symbol}:${contractParams.contract_type}:${Date.now()}:${Math.random()}`;
   const encoder = new TextEncoder();
   let unsubscribe: (() => void) | null = null;
 
@@ -35,7 +34,8 @@ export async function GET(req: Request) {
       };
 
       try {
-        unsubscribe = await derivClient.subscribe(
+        const socket = await getUserSocket(user.id);
+        unsubscribe = await socket.subscribe(
           "proposal",
           {
             proposal: 1,

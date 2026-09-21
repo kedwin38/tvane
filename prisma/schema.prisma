@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// A trader who has authenticated via "Login with Deriv" OAuth. We never
+// store a Deriv password — only the API token Deriv itself issued for
+// this app, encrypted at rest (see lib/security/crypto.ts).
+model User {
+  id                String    @id @default(cuid())
+  derivLoginId      String    @unique
+  email             String?
+  country           String?
+  currency          String?
+  isVirtual         Boolean   @default(true)
+  landingCompanyName String?
+  derivTokenCipher  String
+  // Other accounts (currencies / real+demo) Deriv returned at login time,
+  // so a future account-switcher doesn't need to re-authenticate.
+  linkedAccounts    Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastLoginAt       DateTime?
+  sessions          UserSession[]
+
+  @@index([derivLoginId])
+}
+
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  userAgent String?
+  ipHash    String?
+
+  @@index([userId])
+}
+
+// Platform staff. Fully separate identity system from User — never tied
+// to a Deriv account, never authenticated via Deriv OAuth.
+model AdminUser {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  passwordHash       String
+  mustChangePassword Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  lastLoginAt        DateTime?
+  sessions           AdminSession[]
+}
+
+model AdminSession {
+  id        String    @id @default(cuid())
+  adminId   String
+  admin     AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  userAgent String?
+  ipHash    String?
+
+  @@index([adminId])
+}
+
+// Runtime-editable platform secrets (the Deriv app's own OAuth app_id,
+// master API token used for public market data, etc.) — encrypted at
+// rest, changeable from /admin without a redeploy. Bootstrapped from
+// environment variables on first boot; the DB copy wins after that.
+model PlatformCredential {
+  key         String   @id
+  valueCipher String
+  description String?
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorType String
+  actorId   String?
+  action    String
+  detail    Json?
+  createdAt DateTime @default(now())
+
+  @@index([actorType, actorId])
+  @@index([createdAt])
+}
+
+// Layer 1 of the intelligence architecture (docs/PROJECT_SPECIFICATION.md):
+// rolling GBM parameter estimates + self-falsification test results,
+// persisted so the terminal's STATE/SHIFT panel reflects real history
+// rather than only the current in-memory value.
+model IntelligenceSnapshot {
+  id                 String   @id @default(cuid())
+  symbol             String
+  granularity        Int
+  muPerBar           Float
+  sigmaPerBar        Float
+  annualizedSigmaPct Float
+  sampleCount        Int
+  modelValid         Boolean
+  invalidReason      String?
+  acf1               Float?
+  ljungBoxStat       Float?
+  ljungBoxP          Float?
+  excessKurtosis     Float?
+  createdAt          DateTime @default(now())
+
+  @@index([symbol, createdAt])
+}

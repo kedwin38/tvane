@@ -1,34 +1,9 @@
-import { derivClient } from "@/lib/deriv/client";
+import { getMarketSocket } from "@/lib/deriv/market";
+import { RollingEstimator } from "@/lib/intelligence/layer1";
+import { prisma } from "@/lib/db/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
-
-// Rolling realized-volatility estimator (Layer 1 of the intelligence
-// architecture in docs/PROJECT_SPECIFICATION.md) — EWMA of squared
-// log-returns over closes, annualized. This is the live STATE the
-// terminal's info panel shows next to the chart.
-function makeVolEstimator(granularitySeconds: number, lambda = 0.94) {
-  let lastClose: number | null = null;
-  let ewmaVar = 0;
-  let n = 0;
-  const stepsPerYear = SECONDS_PER_YEAR / granularitySeconds;
-
-  return {
-    update(close: number) {
-      if (lastClose !== null && close > 0 && lastClose > 0) {
-        const r = Math.log(close / lastClose);
-        ewmaVar = n === 0 ? r * r : lambda * ewmaVar + (1 - lambda) * r * r;
-        n += 1;
-      }
-      lastClose = close;
-      const sigmaPerBar = Math.sqrt(ewmaVar);
-      const annualizedSigma = sigmaPerBar * Math.sqrt(stepsPerYear);
-      return { sigmaPerBar, annualizedSigmaPct: annualizedSigma * 100, samples: n };
-    },
-  };
-}
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -36,8 +11,31 @@ export async function GET(req: Request) {
   const granularity = Number(searchParams.get("granularity") ?? 60);
 
   const encoder = new TextEncoder();
-  const volEstimator = makeVolEstimator(granularity);
+  const estimator = new RollingEstimator(symbol, granularity);
   let unsubscribe: (() => void) | null = null;
+
+  const persistSnapshot = (state: ReturnType<RollingEstimator["update"]>) => {
+    prisma.intelligenceSnapshot
+      .create({
+        data: {
+          symbol: state.symbol,
+          granularity: state.granularity,
+          muPerBar: state.muPerBar,
+          sigmaPerBar: state.sigmaPerBar,
+          annualizedSigmaPct: state.annualizedSigmaPct,
+          sampleCount: state.samples,
+          modelValid: state.falsification.modelValid,
+          invalidReason: state.falsification.invalidReason,
+          acf1: state.falsification.acf1,
+          ljungBoxStat: state.falsification.ljungBoxStat,
+          ljungBoxP: state.falsification.ljungBoxP,
+          excessKurtosis: state.falsification.excessKurtosis,
+        },
+      })
+      .catch(() => {
+        /* best-effort persistence; the live stream must not depend on the DB */
+      });
+  };
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -46,7 +44,8 @@ export async function GET(req: Request) {
       };
 
       try {
-        unsubscribe = await derivClient.subscribe(
+        const socket = await getMarketSocket();
+        unsubscribe = await socket.subscribe(
           "ticks_history",
           {
             ticks_history: symbol,
@@ -56,13 +55,14 @@ export async function GET(req: Request) {
             end: "latest",
           },
           (msg) => {
-            if (msg.msg_type === "candles" && msg.candles) {
-              let state = { sigmaPerBar: 0, annualizedSigmaPct: 0, samples: 0 };
-              for (const c of msg.candles) state = volEstimator.update(Number(c.close));
+            if (msg.msg_type === "candles" && msg.candles?.length) {
+              let state = estimator.update(Number(msg.candles[0].close));
+              for (const c of msg.candles.slice(1)) state = estimator.update(Number(c.close));
               send("history", { candles: msg.candles, state });
             } else if (msg.msg_type === "ohlc" && msg.ohlc) {
-              const state = volEstimator.update(Number(msg.ohlc.close));
+              const state = estimator.update(Number(msg.ohlc.close));
               send("candle", { candle: msg.ohlc, state });
+              if (estimator.shouldPersistSnapshot()) persistSnapshot(state);
             }
           },
           { streamType: "ohlc", discriminator: `${symbol}:${granularity}` }

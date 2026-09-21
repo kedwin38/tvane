@@ -56,6 +56,9 @@ export default function LandingPage() {
           <a href="#hierarchy" className="label-caps text-text-3 transition-colors hover:text-text-1">
             How it reads
           </a>
+          <Link href="/login" className="label-caps text-text-3 transition-colors hover:text-text-1">
+            Log in
+          </Link>
           <Link
             href="/terminal"
             className="rounded-md border border-hairline bg-panel px-4 py-2 text-sm text-text-1 transition-colors hover:border-teal/40"
