@@ -14,6 +14,10 @@ type Health = {
     lastSymbol: string | null;
     lastModelValid: boolean | null;
   };
+  autoTrading: {
+    activeStrategyCount: number;
+    last24h: Record<string, number>;
+  };
   deployment: { environment: string; serviceName: string; nodeEnv: string };
 };
 
@@ -104,6 +108,28 @@ export default function AdminHealthPage() {
                   <span className={health.intelligence.lastModelValid ? "text-positive" : "text-negative"}>
                     {health.intelligence.lastModelValid === null ? "—" : String(health.intelligence.lastModelValid)}
                   </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-hairline bg-panel p-5">
+              <span className="label-caps text-teal">Auto Trading</span>
+              <div className="mt-3 grid grid-cols-4 gap-4 font-mono text-sm">
+                <div>
+                  <span className="label-caps block text-text-3">Active</span>
+                  <span className="text-text-1">{health.autoTrading.activeStrategyCount}</span>
+                </div>
+                <div>
+                  <span className="label-caps block text-text-3">Executed (24h)</span>
+                  <span className="text-positive">{health.autoTrading.last24h.executed ?? 0}</span>
+                </div>
+                <div>
+                  <span className="label-caps block text-text-3">Rejected (24h)</span>
+                  <span className="text-text-1">{health.autoTrading.last24h.rejected ?? 0}</span>
+                </div>
+                <div>
+                  <span className="label-caps block text-text-3">Errors (24h)</span>
+                  <span className="text-negative">{health.autoTrading.last24h.error ?? 0}</span>
                 </div>
               </div>
             </div>

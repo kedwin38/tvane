@@ -32,13 +32,21 @@ export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const [db, derivMarket, userCount, snapshotCount, lastSnapshot] = await Promise.all([
-    checkDb(),
-    checkDerivMarket(),
-    prisma.user.count(),
-    prisma.intelligenceSnapshot.count(),
-    prisma.intelligenceSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
-  ]);
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [db, derivMarket, userCount, snapshotCount, lastSnapshot, activeStrategyCount, trades24h] =
+    await Promise.all([
+      checkDb(),
+      checkDerivMarket(),
+      prisma.user.count(),
+      prisma.intelligenceSnapshot.count(),
+      prisma.intelligenceSnapshot.findFirst({ orderBy: { createdAt: "desc" } }),
+      prisma.autoStrategy.count({ where: { enabled: true } }),
+      prisma.autoTradeLog.groupBy({
+        by: ["outcome"],
+        where: { createdAt: { gte: since24h } },
+        _count: { _all: true },
+      }),
+    ]);
 
   return NextResponse.json({
     db,
@@ -50,6 +58,10 @@ export async function GET() {
       lastSnapshotAt: lastSnapshot?.createdAt ?? null,
       lastSymbol: lastSnapshot?.symbol ?? null,
       lastModelValid: lastSnapshot?.modelValid ?? null,
+    },
+    autoTrading: {
+      activeStrategyCount,
+      last24h: Object.fromEntries(trades24h.map((t) => [t.outcome, t._count._all])),
     },
     deployment: {
       environment: process.env.RAILWAY_ENVIRONMENT_NAME ?? "unknown",
