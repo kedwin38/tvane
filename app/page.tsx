@@ -75,7 +75,17 @@ export default function LandingPage() {
             <Mark size={18} />
             <span className="text-xs text-text-3">Tidevane</span>
           </div>
-          <span className="text-xs text-text-3">Trading involves risk.</span>
+          <div className="flex items-center gap-4 text-xs text-text-3">
+            <Link href="/risk-disclosure" className="hover:text-text-1">
+              Risk Disclosure
+            </Link>
+            <Link href="/terms" className="hover:text-text-1">
+              Terms
+            </Link>
+            <Link href="/privacy" className="hover:text-text-1">
+              Privacy
+            </Link>
+          </div>
         </div>
       </footer>
     </div>
