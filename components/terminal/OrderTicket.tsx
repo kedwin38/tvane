@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from "react";
 
+type FairValue = {
+  fairProbability: number;
+  fairValue: number;
+  quotedCost: number;
+  edge: number;
+  edgePct: number;
+};
+
 type Quote = {
   id: string;
   ask_price: number;
   payout: number;
   spot: number;
   display_value: string;
+  fairValue: FairValue | null;
 };
 
 const CONTRACT_TYPES = [
@@ -169,15 +178,26 @@ export function OrderTicket({
       <div className="rounded-md border border-hairline bg-panel-raised p-3">
         {quoteError && <p className="text-xs text-negative">{quoteError}</p>}
         {!quoteError && quote && (
-          <div className="flex items-center justify-between font-mono text-sm">
-            <div className="flex flex-col gap-0.5">
-              <span className="label-caps text-text-3">Payout</span>
-              <span className="text-text-1">{quote.payout.toFixed(2)} USD</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between font-mono text-sm">
+              <div className="flex flex-col gap-0.5">
+                <span className="label-caps text-text-3">Payout</span>
+                <span className="text-text-1">{quote.payout.toFixed(2)} USD</span>
+              </div>
+              <div className="flex flex-col gap-0.5 text-right">
+                <span className="label-caps text-text-3">Cost</span>
+                <span className="text-text-1">{quote.ask_price.toFixed(2)} USD</span>
+              </div>
             </div>
-            <div className="flex flex-col gap-0.5 text-right">
-              <span className="label-caps text-text-3">Cost</span>
-              <span className="text-text-1">{quote.ask_price.toFixed(2)} USD</span>
-            </div>
+            {quote.fairValue && (
+              <div className="flex items-center justify-between border-t border-hairline pt-2 font-mono text-xs">
+                <span className="label-caps text-text-3">Fair value edge</span>
+                <span className={quote.fairValue.edgePct >= 0 ? "text-positive" : "text-negative"}>
+                  {quote.fairValue.edgePct >= 0 ? "+" : ""}
+                  {quote.fairValue.edgePct.toFixed(2)}%
+                </span>
+              </div>
+            )}
           </div>
         )}
         {!quoteError && !quote && (

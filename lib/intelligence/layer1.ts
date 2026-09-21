@@ -16,27 +16,12 @@
 // Deriv can retune a generator, or that a symbol may simply not match
 // the offline file's findings.
 
+import { chiSquarePValueWilsonHilferty } from "./stats";
+
 const SECONDS_PER_YEAR = 365 * 24 * 60 * 60;
 const MAX_BUFFER = 400;
 const BATTERY_EVERY_N_UPDATES = 20;
 const LJUNG_BOX_LAGS = 10;
-
-// Standard normal CDF via Abramowitz-Stegun erf approximation — used
-// only to turn the Ljung-Box Q-statistic into an approximate p-value for
-// display; not a claim of research-grade precision.
-function normalCdf(x: number): number {
-  const t = 1 / (1 + 0.2316419 * Math.abs(x));
-  const d = 0.3989423 * Math.exp((-x * x) / 2);
-  const poly = t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-  const p = 1 - d * poly;
-  return x >= 0 ? p : 1 - p;
-}
-
-function chiSquarePValueWilsonHilferty(q: number, df: number): number {
-  if (q <= 0) return 1;
-  const z = (Math.pow(q / df, 1 / 3) - (1 - 2 / (9 * df))) / Math.sqrt(2 / (9 * df));
-  return 1 - normalCdf(z);
-}
 
 export type SelfFalsificationResult = {
   modelValid: boolean;

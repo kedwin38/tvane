@@ -1,5 +1,34 @@
 import { getCurrentUser } from "@/lib/auth/user-session";
 import { getUserSocket } from "@/lib/deriv/user-connections";
+import { getLiveState } from "@/lib/intelligence/registry";
+import { digitalFairValue } from "@/lib/intelligence/layer3-pricing";
+
+const MINUTES_PER_YEAR = 365 * 24 * 60;
+
+/** Fair value only applies to Rise/Fall priced in calendar minutes — see
+ * the constraint documented in lib/intelligence/layer3-pricing.ts on
+ * why tick-count durations are out of scope. */
+async function computeFairValue(contractParams: Record<string, any>, proposal: any) {
+  if (contractParams.duration_unit !== "m") return null;
+  if (contractParams.contract_type !== "CALL" && contractParams.contract_type !== "PUT") return null;
+
+  const live = await getLiveState(contractParams.symbol);
+  if (!live) return null;
+
+  const years = Number(contractParams.duration) / MINUTES_PER_YEAR;
+  const sigmaAnnual = live.state.annualizedSigmaPct / 100;
+  const barrier = Number(proposal.spot ?? live.spot);
+
+  return digitalFairValue({
+    spot: live.spot,
+    barrier,
+    sigmaAnnual,
+    years,
+    direction: contractParams.contract_type === "CALL" ? "above" : "below",
+    payout: Number(proposal.payout),
+    quotedCost: Number(proposal.ask_price),
+  });
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,7 +82,11 @@ export async function GET(req: Request) {
               send("error", { message: msg.error.message });
               return;
             }
-            if (msg.proposal) send("quote", msg.proposal);
+            if (msg.proposal) {
+              computeFairValue(contractParams, msg.proposal)
+                .then((fairValue) => send("quote", { ...msg.proposal, fairValue }))
+                .catch(() => send("quote", msg.proposal));
+            }
           },
           { streamType: "proposal", discriminator: subKey }
         );
