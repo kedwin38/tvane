@@ -176,12 +176,10 @@ export function DigitPanel({ symbol }: { symbol: string }) {
             })}
           </svg>
 
-          <p className="text-xs leading-relaxed text-text-2">
+          <p className="text-xs text-text-3">
             {flaggedCount === 0
-              ? "All digits within expected range of uniform (10%)."
-              : `${flaggedCount} digit${flaggedCount > 1 ? "s" : ""} statistically deviating from uniform (SPRT, α=0.01/β=0.05).`}{" "}
-            Deviation from uniform is not by itself tradeable edge — see the note in
-            lib/intelligence/layer2-digits.ts.
+              ? "All digits within expected range."
+              : `${flaggedCount} digit${flaggedCount > 1 ? "s" : ""} deviating from uniform (SPRT, α=0.01/β=0.05).`}
           </p>
         </>
       )}

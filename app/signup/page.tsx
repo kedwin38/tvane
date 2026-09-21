@@ -14,11 +14,7 @@ export default function SignupPage() {
       <div className="w-full max-w-sm rounded-lg border border-hairline bg-panel p-8 shadow-instrument">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <Mark size={32} />
-          <h1 className="text-lg font-medium text-text-1">Create your account</h1>
-          <p className="text-sm text-text-2">
-            Trading on Tidevane happens through your own Deriv account. Create one on
-            Deriv first, then come back and sign in.
-          </p>
+          <h1 className="text-lg font-medium text-text-1">Create account</h1>
         </div>
 
         <a
@@ -29,10 +25,6 @@ export default function SignupPage() {
         >
           Create a Deriv account
         </a>
-
-        <p className="mt-4 text-center text-xs text-text-3">
-          Opens Deriv&apos;s own sign-up in a new tab. Once it&apos;s done, return here.
-        </p>
 
         <div className="mt-6 border-t border-hairline pt-6 text-center">
           <p className="text-xs text-text-3">

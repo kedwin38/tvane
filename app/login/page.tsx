@@ -21,11 +21,7 @@ export default function LoginPage({
       <div className="w-full max-w-sm rounded-lg border border-hairline bg-panel p-8 shadow-instrument">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <Mark size={32} />
-          <h1 className="text-lg font-medium text-text-1">Sign in to Tidevane</h1>
-          <p className="text-sm text-text-2">
-            Tidevane doesn't hold its own password for your trading account — sign in
-            directly with Deriv, and only the permissions you grant come back to us.
-          </p>
+          <h1 className="text-lg font-medium text-text-1">Sign in</h1>
         </div>
 
         {error && (

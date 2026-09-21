@@ -3,22 +3,10 @@
 import type { Layer1State } from "./Chart";
 
 const PLACEHOLDER_ROWS = [
-  {
-    key: "EVIDENCE",
-    body: "Fair-value pricing engine (Layer 3) is not yet implemented. The order ticket shows Deriv's quoted price only, no modeled edge.",
-  },
-  {
-    key: "CONFIDENCE",
-    body: "No confidence interval is computed yet — nothing here should be read as a signal.",
-  },
-  {
-    key: "RISK / INVALIDATION",
-    body: "No automated risk engine or kill-switch exists yet. Trades placed here are unmanaged and irreversible.",
-  },
-  {
-    key: "TRACE",
-    body: "No backtest or live-validation record exists for this build. Treat every trade as manual and unaided.",
-  },
+  { key: "EVIDENCE", body: "Not built — no modeled fair value yet." },
+  { key: "CONFIDENCE", body: "Not built." },
+  { key: "RISK", body: "No automated risk controls. Trades are manual and final." },
+  { key: "TRACE", body: "No backtest record yet." },
 ];
 
 export function StatePanel({ state }: { state: Layer1State | null }) {
@@ -31,20 +19,20 @@ export function StatePanel({ state }: { state: Layer1State | null }) {
           {state ? (
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 font-mono text-xs text-text-2">
               <span>
-                σ (annualized) <span className="text-text-1">{state.annualizedSigmaPct.toFixed(2)}%</span>
+                σ (ann.) <span className="text-text-1">{state.annualizedSigmaPct.toFixed(2)}%</span>
               </span>
               <span>
-                μ (annualized) <span className="text-text-1">{state.annualizedMuPct.toFixed(2)}%</span>
+                μ (ann.) <span className="text-text-1">{state.annualizedMuPct.toFixed(2)}%</span>
               </span>
               <span>
                 samples <span className="text-text-1">{state.samples}</span>
               </span>
               <span>
-                granularity <span className="text-text-1">{state.granularity}s</span>
+                interval <span className="text-text-1">{state.granularity}s</span>
               </span>
             </div>
           ) : (
-            <span className="text-xs leading-relaxed text-text-2">Waiting for live data…</span>
+            <span className="text-xs text-text-3">Waiting for data…</span>
           )}
         </div>
 
@@ -60,25 +48,23 @@ export function StatePanel({ state }: { state: Layer1State | null }) {
                 {state.falsification.modelValid ? "Model holding" : "Model flagged"}
               </span>
               <span className="font-mono text-xs text-text-3">
-                ACF(1)={state.falsification.acf1.toFixed(4)} · Ljung-Box p=
-                {state.falsification.ljungBoxP?.toFixed(4)} · excess kurtosis=
+                ACF(1)={state.falsification.acf1.toFixed(4)} · LB p=
+                {state.falsification.ljungBoxP?.toFixed(4)} · kurt=
                 {state.falsification.excessKurtosis?.toFixed(2)}
               </span>
               {state.falsification.invalidReason && (
-                <span className="text-xs leading-relaxed text-warning">{state.falsification.invalidReason}</span>
+                <span className="text-xs text-warning">{state.falsification.invalidReason}</span>
               )}
             </div>
           ) : (
-            <span className="text-xs leading-relaxed text-text-2">
-              Accumulating samples before the self-falsification battery can run.
-            </span>
+            <span className="text-xs text-text-3">Accumulating samples.</span>
           )}
         </div>
 
         {PLACEHOLDER_ROWS.map((row) => (
-          <div key={row.key} className="flex flex-col gap-1 py-2.5 last:pb-0">
+          <div key={row.key} className="flex items-baseline justify-between py-2.5 last:pb-0">
             <span className="label-caps text-teal">{row.key}</span>
-            <span className="text-xs leading-relaxed text-text-2">{row.body}</span>
+            <span className="text-xs text-text-3">{row.body}</span>
           </div>
         ))}
       </div>
