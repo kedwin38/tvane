@@ -1,33 +1,70 @@
 import { getCurrentUser } from "@/lib/auth/user-session";
 import { getUserSocket } from "@/lib/deriv/user-connections";
 import { getLiveState } from "@/lib/intelligence/registry";
-import { digitalFairValue } from "@/lib/intelligence/layer3-pricing";
+import { digitalFairValue, touchFairValue, vanillaFairValue } from "@/lib/intelligence/layer3-pricing";
 
 const MINUTES_PER_YEAR = 365 * 24 * 60;
 
-/** Fair value only applies to Rise/Fall priced in calendar minutes — see
- * the constraint documented in lib/intelligence/layer3-pricing.ts on
- * why tick-count durations are out of scope. */
+/** Fair value only applies to calendar-minute durations — see the
+ * constraint documented in lib/intelligence/layer3-pricing.ts on why
+ * tick-count durations are out of scope (no fixed calendar time). */
 async function computeFairValue(contractParams: Record<string, any>, proposal: any) {
   if (contractParams.duration_unit !== "m") return null;
-  if (contractParams.contract_type !== "CALL" && contractParams.contract_type !== "PUT") return null;
 
   const live = await getLiveState(contractParams.symbol);
   if (!live) return null;
 
   const years = Number(contractParams.duration) / MINUTES_PER_YEAR;
   const sigmaAnnual = live.state.annualizedSigmaPct / 100;
-  const barrier = Number(proposal.spot ?? live.spot);
+  const spot = Number(proposal.spot ?? live.spot);
+  const type = contractParams.contract_type;
 
-  return digitalFairValue({
-    spot: live.spot,
-    barrier,
-    sigmaAnnual,
-    years,
-    direction: contractParams.contract_type === "CALL" ? "above" : "below",
-    payout: Number(proposal.payout),
-    quotedCost: Number(proposal.ask_price),
-  });
+  if (type === "CALL" || type === "PUT") {
+    return digitalFairValue({
+      spot,
+      barrier: spot,
+      sigmaAnnual,
+      years,
+      direction: type === "CALL" ? "above" : "below",
+      payout: Number(proposal.payout),
+      quotedCost: Number(proposal.ask_price),
+    });
+  }
+
+  if (type === "ONETOUCH" || type === "NOTOUCH") {
+    const offset = Number(String(contractParams.barrier).replace("+", ""));
+    return touchFairValue({
+      spot,
+      barrier: spot + offset,
+      sigmaAnnual,
+      years,
+      mode: type === "ONETOUCH" ? "touch" : "no-touch",
+      payout: Number(proposal.payout),
+      quotedCost: Number(proposal.ask_price),
+    });
+  }
+
+  if (type === "VANILLALONGCALL" || type === "VANILLALONGPUT") {
+    const offset = Number(String(contractParams.barrier).replace("+", ""));
+    const result = vanillaFairValue({
+      spot,
+      strike: spot + offset,
+      sigmaAnnual,
+      years,
+      type: type === "VANILLALONGCALL" ? "call" : "put",
+      quotedCost: Number(proposal.ask_price),
+    });
+    // Normalize to the same shape as the other pricers for the UI.
+    return {
+      fairProbability: NaN,
+      fairValue: result.fairPrice,
+      quotedCost: result.quotedCost,
+      edge: result.edge,
+      edgePct: result.edgePct,
+    };
+  }
+
+  return null;
 }
 
 export const runtime = "nodejs";

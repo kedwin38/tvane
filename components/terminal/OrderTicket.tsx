@@ -19,10 +19,12 @@ type Quote = {
   fairValue: FairValue | null;
 };
 
-type Family = "updown" | "digits" | "accumulator";
+type Family = "updown" | "touch" | "vanilla" | "digits" | "accumulator";
 
 const FAMILIES: { value: Family; label: string }[] = [
   { value: "updown", label: "Rise/Fall" },
+  { value: "touch", label: "Touch" },
+  { value: "vanilla", label: "Vanillas" },
   { value: "digits", label: "Digits" },
   { value: "accumulator", label: "Accumulators" },
 ];
@@ -30,6 +32,16 @@ const FAMILIES: { value: Family; label: string }[] = [
 const UPDOWN_TYPES = [
   { value: "CALL", label: "Rise" },
   { value: "PUT", label: "Fall" },
+];
+
+const TOUCH_TYPES = [
+  { value: "ONETOUCH", label: "Touch" },
+  { value: "NOTOUCH", label: "No Touch" },
+];
+
+const VANILLA_TYPES = [
+  { value: "VANILLALONGCALL", label: "Call" },
+  { value: "VANILLALONGPUT", label: "Put" },
 ];
 
 // Full Digits family per developers.deriv.com's contract catalogue —
@@ -56,11 +68,14 @@ export function OrderTicket({
 }) {
   const [family, setFamily] = useState<Family>("updown");
   const [updownType, setUpdownType] = useState("CALL");
+  const [touchType, setTouchType] = useState("ONETOUCH");
+  const [vanillaType, setVanillaType] = useState("VANILLALONGCALL");
   const [digitType, setDigitType] = useState("DIGITDIFF");
   const [amount, setAmount] = useState(10);
   const [duration, setDuration] = useState(5);
   const [durationUnit, setDurationUnit] = useState<"t" | "m">("t");
   const [digitBarrier, setDigitBarrier] = useState(0);
+  const [barrierOffset, setBarrierOffset] = useState(10);
   const [growthRate, setGrowthRate] = useState(0.02);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
@@ -68,7 +83,16 @@ export function OrderTicket({
   const [confirming, setConfirming] = useState(false);
   const [orderResult, setOrderResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const contractType = family === "updown" ? updownType : family === "digits" ? digitType : "ACCU";
+  const contractType =
+    family === "updown"
+      ? updownType
+      : family === "touch"
+      ? touchType
+      : family === "vanilla"
+      ? vanillaType
+      : family === "digits"
+      ? digitType
+      : "ACCU";
   const digitNeedsBarrier = family === "digits" && digitType !== "DIGITEVEN" && digitType !== "DIGITODD";
 
   useEffect(() => {
@@ -85,6 +109,9 @@ export function OrderTicket({
       params.duration = duration;
       params.duration_unit = durationUnit;
       if (digitNeedsBarrier) params.barrier = String(digitBarrier);
+      if (family === "touch" || family === "vanilla") {
+        params.barrier = `${barrierOffset >= 0 ? "+" : ""}${barrierOffset}`;
+      }
     }
 
     setQuote(null);
@@ -100,7 +127,7 @@ export function OrderTicket({
       }
     });
     return () => es.close();
-  }, [symbol, contractType, family, amount, duration, durationUnit, digitBarrier, digitNeedsBarrier, growthRate]);
+  }, [symbol, contractType, family, amount, duration, durationUnit, digitBarrier, digitNeedsBarrier, growthRate, barrierOffset]);
 
   async function placeTrade() {
     if (!quote) return;
@@ -142,7 +169,7 @@ export function OrderTicket({
         )}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-5 gap-1">
         {FAMILIES.map((f) => (
           <button
             key={f.value}
@@ -174,6 +201,64 @@ export function OrderTicket({
             </button>
           ))}
         </div>
+      )}
+
+      {family === "touch" && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            {TOUCH_TYPES.map((c) => (
+              <button
+                key={c.value}
+                onClick={() => setTouchType(c.value)}
+                className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                  touchType === c.value
+                    ? "border-teal/40 bg-teal/10 text-teal"
+                    : "border-hairline bg-panel-raised text-text-2 hover:text-text-1"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="label-caps text-text-3">Barrier offset (from spot)</span>
+            <input
+              type="number"
+              value={barrierOffset}
+              onChange={(e) => setBarrierOffset(Number(e.target.value))}
+              className="rounded-md border border-hairline bg-panel-raised px-3 py-2 font-mono text-text-1 outline-none focus:border-teal/50"
+            />
+          </label>
+        </>
+      )}
+
+      {family === "vanilla" && (
+        <>
+          <div className="grid grid-cols-2 gap-2">
+            {VANILLA_TYPES.map((c) => (
+              <button
+                key={c.value}
+                onClick={() => setVanillaType(c.value)}
+                className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                  vanillaType === c.value
+                    ? "border-teal/40 bg-teal/10 text-teal"
+                    : "border-hairline bg-panel-raised text-text-2 hover:text-text-1"
+                }`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <label className="flex flex-col gap-1">
+            <span className="label-caps text-text-3">Strike offset (from spot)</span>
+            <input
+              type="number"
+              value={barrierOffset}
+              onChange={(e) => setBarrierOffset(Number(e.target.value))}
+              className="rounded-md border border-hairline bg-panel-raised px-3 py-2 font-mono text-text-1 outline-none focus:border-teal/50"
+            />
+          </label>
+        </>
       )}
 
       {family === "digits" && (
