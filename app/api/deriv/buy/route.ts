@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/user-session";
 import { getUserSocket } from "@/lib/deriv/user-connections";
 import { prisma } from "@/lib/db/prisma";
+import { rateLimit } from "@/lib/security/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,13 @@ export async function POST(req: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  }
+
+  // A human confirming each trade can't realistically exceed this; a
+  // script trying to hammer the endpoint will.
+  const limited = rateLimit(`buy:${user.id}`, 20, 60 * 1000);
+  if (!limited.allowed) {
+    return NextResponse.json({ error: "Too many order attempts. Slow down." }, { status: 429 });
   }
 
   const body = await req.json().catch(() => null);
