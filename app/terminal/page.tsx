@@ -8,6 +8,7 @@ import { SymbolPicker } from "@/components/terminal/SymbolPicker";
 import { Chart, type Layer1State } from "@/components/terminal/Chart";
 import { OrderTicket } from "@/components/terminal/OrderTicket";
 import { StatePanel } from "@/components/terminal/StatePanel";
+import { DigitPanel } from "@/components/terminal/DigitPanel";
 
 export default function TerminalPage() {
   const [symbol, setSymbol] = useState("R_100");
@@ -34,6 +35,7 @@ export default function TerminalPage() {
         <Chart symbol={symbol} onState={setLayer1State} />
         <div className="flex flex-col gap-4 overflow-y-auto">
           <OrderTicket symbol={symbol} isVirtual={isVirtual} />
+          <DigitPanel symbol={symbol} />
           <StatePanel state={layer1State} />
         </div>
       </main>

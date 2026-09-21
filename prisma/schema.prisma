@@ -112,3 +112,20 @@ model IntelligenceSnapshot {
 
   @@index([symbol, createdAt])
 }
+
+// Layer 2 (lib/intelligence/layer2-digits.ts): a row per confirmed
+// status transition from the per-digit SPRT monitor — not a periodic
+// snapshot like Layer 1, since a status *change* is the meaningful
+// event here, not the continuous state.
+model DigitSignal {
+  id          String   @id @default(cuid())
+  symbol      String
+  digit       Int
+  status      String
+  empiricalPct Float
+  llr         Float
+  sampleCount Int
+  createdAt   DateTime @default(now())
+
+  @@index([symbol, createdAt])
+}
